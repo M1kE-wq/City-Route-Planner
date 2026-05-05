@@ -28,6 +28,10 @@ button {
   cursor: pointer;
 }
 
+label {
+  cursor: pointer;
+}
+
 .app {
   min-height: 100vh;
   display: grid;
@@ -44,6 +48,10 @@ button {
   position: absolute;
   inset: 0;
   background: #dfe9df;
+}
+
+#map.is-picking {
+  cursor: crosshair;
 }
 
 .planner-panel {
@@ -127,6 +135,68 @@ button {
   color: #264944;
   font-size: 0.9rem;
   margin-bottom: 16px;
+}
+
+.mode-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  background: #edf3ee;
+}
+
+.mode-button {
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  border-radius: 7px;
+  color: #53625b;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.mode-button:hover {
+  color: #172026;
+  background: #fff;
+}
+
+.mode-button.active {
+  color: #fff;
+  background: #0b4f6c;
+  box-shadow: 0 6px 18px rgba(11, 79, 108, 0.2);
+}
+
+.avoid-toggle {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+  padding: 0 12px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  color: #28423b;
+  background: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.avoid-toggle input {
+  width: 17px;
+  height: 17px;
+  accent-color: #0b4f6c;
+}
+
+.avoid-toggle svg {
+  color: #d64545;
 }
 
 .locations {
@@ -231,6 +301,8 @@ button {
   line-height: 1.3;
   color: #24302b;
   font-size: 0.88rem;
+  display: grid;
+  gap: 3px;
 }
 
 .suggestion:hover {
@@ -241,15 +313,44 @@ button {
   color: #66766e;
 }
 
+.suggestion-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.suggestion-badge {
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #0b4f6c;
+  background: #e7f2f2;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.suggestion-meta {
+  color: #0f8b8d;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.suggestion-detail {
+  color: #66766e;
+  font-size: 0.8rem;
+}
+
 .actions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 16px;
 }
 
 .primary-action,
-.secondary-action {
+.secondary-action,
+.start-action {
   height: 44px;
   border-radius: 8px;
   border: 0;
@@ -277,6 +378,20 @@ button {
 
 .secondary-action:hover {
   background: #dae4dc;
+}
+
+.icon-label {
+  padding: 0 12px;
+}
+
+.start-action {
+  grid-column: 1 / -1;
+  color: #fff;
+  background: #0f8b8d;
+}
+
+.start-action:hover {
+  background: #0b6f71;
 }
 
 .panel-footer {
@@ -327,6 +442,23 @@ button {
   font-weight: 700;
 }
 
+.navigation-banner {
+  position: absolute;
+  z-index: 600;
+  left: 20px;
+  bottom: 24px;
+  max-width: calc(100% - 110px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: #0f8b8d;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  font-weight: 800;
+}
+
 .leaflet-control-zoom {
   border: 0 !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
@@ -363,6 +495,10 @@ button {
   .summary-grid,
   .actions {
     grid-template-columns: 1fr;
+  }
+
+  .start-action {
+    grid-column: auto;
   }
 
   .brand h1 {
