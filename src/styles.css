@@ -1,0 +1,375 @@
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #172026;
+  background: #f5f6f1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  background: #edf2ed;
+}
+
+.map-shell {
+  position: relative;
+  min-height: 100vh;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  background: #dfe9df;
+}
+
+.planner-panel {
+  z-index: 500;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  background: #fbfcf8;
+  border-left: 1px solid #d8ded7;
+  padding: 22px;
+  box-shadow: -12px 0 35px rgba(21, 42, 34, 0.14);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 18px;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #0b4f6c;
+  box-shadow: 0 10px 22px rgba(11, 79, 108, 0.22);
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.65rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.brand p {
+  margin: 5px 0 0;
+  color: #62716a;
+  font-size: 0.93rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.summary-tile {
+  border: 1px solid #dce3da;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  min-height: 93px;
+  display: grid;
+  align-content: space-between;
+  gap: 5px;
+}
+
+.summary-tile svg {
+  color: #0f8b8d;
+}
+
+.summary-tile span {
+  color: #66766e;
+  font-size: 0.84rem;
+}
+
+.summary-tile strong {
+  font-size: 1.3rem;
+}
+
+.status-line {
+  min-height: 38px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #e8f0ef;
+  color: #264944;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+.locations {
+  display: grid;
+  gap: 12px;
+}
+
+.location-row {
+  position: relative;
+}
+
+.row-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: #26322e;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.row-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: #0f8b8d;
+}
+
+.row-heading .subtle {
+  margin-left: auto;
+}
+
+.search-field {
+  height: 45px;
+  border: 1px solid #cad4cb;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+}
+
+.search-field:focus-within {
+  border-color: #0f8b8d;
+  box-shadow: 0 0 0 3px rgba(15, 139, 141, 0.14);
+}
+
+.search-field svg {
+  color: #66766e;
+}
+
+.search-field input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  min-width: 0;
+  color: #172026;
+  background: transparent;
+}
+
+.search-field input::placeholder {
+  color: #8b9892;
+}
+
+.icon-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #264944;
+  background: #eef3ee;
+}
+
+.icon-button:hover {
+  background: #dce8e4;
+}
+
+.suggestions {
+  position: absolute;
+  z-index: 700;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  border: 1px solid #d6ded6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 35px rgba(33, 47, 40, 0.16);
+  overflow: hidden;
+}
+
+.suggestion {
+  width: 100%;
+  border: 0;
+  background: #fff;
+  text-align: left;
+  padding: 11px 12px;
+  line-height: 1.3;
+  color: #24302b;
+  font-size: 0.88rem;
+}
+
+.suggestion:hover {
+  background: #eef6f4;
+}
+
+.suggestion.muted {
+  color: #66766e;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.primary-action,
+.secondary-action {
+  height: 44px;
+  border-radius: 8px;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.primary-action {
+  color: #fff;
+  background: #0b4f6c;
+}
+
+.primary-action:hover {
+  background: #083d54;
+}
+
+.secondary-action {
+  color: #28423b;
+  background: #e8eee9;
+  padding: 0 16px;
+}
+
+.secondary-action:hover {
+  background: #dae4dc;
+}
+
+.panel-footer {
+  margin-top: 16px;
+  color: #728078;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.route-marker {
+  background: transparent;
+  border: 0;
+}
+
+.route-marker span {
+  width: 34px;
+  height: 34px;
+  border-radius: 50% 50% 50% 6px;
+  transform: rotate(-45deg);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  border: 3px solid #fff;
+  box-shadow: 0 6px 18px rgba(18, 29, 25, 0.28);
+  font-weight: 900;
+}
+
+.route-marker b {
+  transform: rotate(45deg);
+  line-height: 1;
+}
+
+.pick-banner {
+  position: absolute;
+  z-index: 600;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: #172026;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  font-weight: 700;
+}
+
+.leaflet-control-zoom {
+  border: 0 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+}
+
+.leaflet-control-zoom a {
+  color: #172026 !important;
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(420px, 58vh) auto;
+  }
+
+  .map-shell {
+    min-height: 420px;
+  }
+
+  .planner-panel {
+    min-height: auto;
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid #d8ded7;
+    box-shadow: 0 -12px 35px rgba(21, 42, 34, 0.14);
+  }
+}
+
+@media (max-width: 520px) {
+  .planner-panel {
+    padding: 16px;
+  }
+
+  .summary-grid,
+  .actions {
+    grid-template-columns: 1fr;
+  }
+
+  .brand h1 {
+    font-size: 1.42rem;
+  }
+
+  .secondary-action {
+    width: 100%;
+  }
+}
