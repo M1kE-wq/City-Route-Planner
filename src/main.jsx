@@ -4,14 +4,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   ArrowLeftRight,
-  Bike,
-  Car,
   CircleDot,
-  CircleSlash,
   Clock3,
   Crosshair,
   Flag,
-  Footprints,
   LocateFixed,
   MapPin,
   Navigation,
@@ -29,29 +25,8 @@ const BULGARIA_BOUNDS = [
   [44.23, 28.75],
 ];
 
-const TRAVEL_MODES = {
-  car: {
-    label: "Car",
-    profile: "driving",
-    speedMetersPerSecond: 18.9,
-    icon: Car,
-    color: "#0b4f6c",
-  },
-  bike: {
-    label: "Bike",
-    profile: "bike",
-    speedMetersPerSecond: 4.7,
-    icon: Bike,
-    color: "#0f8b8d",
-  },
-  foot: {
-    label: "Foot",
-    profile: "foot",
-    speedMetersPerSecond: 1.35,
-    icon: Footprints,
-    color: "#7c4d9e",
-  },
-};
+const ROUTE_COLOR = "#0b4f6c";
+const SAME_POINT_THRESHOLD_METERS = 35;
 
 const emptyPoint = (label) => ({
   label,
@@ -74,9 +49,93 @@ const formatDuration = (seconds) => {
   return hours ? `${hours} h ${minutes} min` : `${minutes} min`;
 };
 
+const formatStepDistance = (meters) => {
+  if (!Number.isFinite(meters)) return "";
+  if (meters >= 1000) return `in ${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} km`;
+  return `in ${Math.max(10, Math.round(meters / 10) * 10)} m`;
+};
+
+const directionText = {
+  "slight right": "slight right",
+  right: "right",
+  "sharp right": "sharp right",
+  "slight left": "slight left",
+  left: "left",
+  "sharp left": "sharp left",
+  straight: "straight",
+  uturn: "make a U-turn",
+};
+
+const formatManeuverInstruction = (step) => {
+  const maneuver = step?.maneuver || {};
+  const road = step?.name ? ` onto ${step.name}` : "";
+  const modifier = directionText[maneuver.modifier] || maneuver.modifier || "";
+
+  if (maneuver.type === "depart") return `Head ${modifier || "out"}${road}`;
+  if (maneuver.type === "arrive") return "Arrive at your destination";
+  if (maneuver.type === "roundabout" || maneuver.type === "rotary") {
+    const exit = maneuver.exit ? ` and take exit ${maneuver.exit}` : "";
+    return `Enter the roundabout${exit}${road}`;
+  }
+  if (maneuver.type === "merge") return `Merge ${modifier}${road}`.trim();
+  if (maneuver.type === "on ramp") return `Take the ramp ${modifier}${road}`.trim();
+  if (maneuver.type === "off ramp") return `Take the exit ${modifier}${road}`.trim();
+  if (maneuver.type === "fork") return `Keep ${modifier}${road}`.trim();
+  if (maneuver.type === "continue") return `Continue ${modifier}${road}`.trim();
+  if (maneuver.type === "turn" || maneuver.type === "new name") return `Turn ${modifier}${road}`.trim();
+
+  return `${maneuver.type || "Continue"} ${modifier}${road}`.trim();
+};
+
+const getNextInstruction = (legs = []) => {
+  const steps = legs.flatMap((leg) => leg.steps || []);
+  const nextStep =
+    steps.find((step) => !["depart", "arrive"].includes(step.maneuver?.type) && step.distance > 15) ||
+    steps.find((step) => step.maneuver?.type !== "arrive") ||
+    steps[0];
+
+  if (!nextStep) return null;
+
+  return {
+    distance: nextStep.distance,
+    distanceText: formatStepDistance(nextStep.distance),
+    instruction: formatManeuverInstruction(nextStep),
+  };
+};
+
 const pointToCoords = (point) => [point.lat, point.lon];
 
-const isPointSet = (point) => Number.isFinite(point.lat) && Number.isFinite(point.lon);
+const isPointSet = (point) => Boolean(point) && Number.isFinite(point.lat) && Number.isFinite(point.lon);
+
+const toRadians = (degrees) => (degrees * Math.PI) / 180;
+
+const toDegrees = (radians) => (radians * 180) / Math.PI;
+
+const distanceBetweenPoints = (a, b) => {
+  if (!isPointSet(a) || !isPointSet(b)) return Infinity;
+
+  const earthRadius = 6371000;
+  const dLat = toRadians(b.lat - a.lat);
+  const dLon = toRadians(b.lon - a.lon);
+  const lat1 = toRadians(a.lat);
+  const lat2 = toRadians(b.lat);
+  const haversine =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+};
+
+const bearingBetweenPoints = (from, to) => {
+  if (!isPointSet(from) || !isPointSet(to)) return 0;
+
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+  const dLon = toRadians(to.lon - from.lon);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  return (toDegrees(Math.atan2(y, x)) + 360) % 360;
+};
 
 const normalizeText = (value = "") =>
   value
@@ -157,6 +216,24 @@ function makeMarkerIcon(type, index) {
     html: `<span style="background:${color}"><b>${label}</b></span>`,
     iconSize: [34, 34],
     iconAnchor: [17, 34],
+  });
+}
+
+function makeUserLocationIcon(bearing, isNavigating) {
+  if (!isNavigating) {
+    return L.divIcon({
+      className: "user-location-dot",
+      html: "<span></span>",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+  }
+
+  return L.divIcon({
+    className: "user-location-marker",
+    html: `<span style="transform: rotate(${bearing}deg)"><b></b></span>`,
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
   });
 }
 
@@ -284,7 +361,7 @@ function LocationInput({
   );
 }
 
-function MapView({ points, route, activePick, onMapPick, routeMode, userLocation, navigationActive }) {
+function MapView({ points, route, activePick, onMapPick, userLocation, navigationActive, userBearing }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
   const activePickRef = useRef(activePick);
@@ -332,7 +409,7 @@ function MapView({ points, route, activePick, onMapPick, routeMode, userLocation
       const line = L.polyline(
         route.coordinates.map(([lon, lat]) => [lat, lon]),
         {
-          color: TRAVEL_MODES[routeMode].color,
+          color: ROUTE_COLOR,
           weight: 6,
           opacity: 0.95,
           lineJoin: "round",
@@ -353,7 +430,7 @@ function MapView({ points, route, activePick, onMapPick, routeMode, userLocation
 
     if (userLocation) {
       const marker = L.marker([userLocation.lat, userLocation.lon], {
-        icon: makeMarkerIcon("user"),
+        icon: makeUserLocationIcon(userBearing, navigationActive),
       }).bindPopup("<strong>Your location</strong>");
       marker.addTo(layerRef.current);
       boundsItems.push(marker.getLatLng());
@@ -369,7 +446,7 @@ function MapView({ points, route, activePick, onMapPick, routeMode, userLocation
     } else if (boundsItems.length === 1) {
       mapRef.current.setView(boundsItems[0], 12);
     }
-  }, [points, route, routeMode, userLocation, navigationActive]);
+  }, [points, route, userLocation, navigationActive, userBearing]);
 
   return (
     <div className="map-shell">
@@ -397,8 +474,7 @@ function App() {
   const [activePick, setActivePick] = useState(null);
   const [route, setRoute] = useState(null);
   const [routeStatus, setRouteStatus] = useState("Add a start and end point.");
-  const [routeMode, setRouteMode] = useState("car");
-  const [avoidHighways, setAvoidHighways] = useState(false);
+  const [nextInstruction, setNextInstruction] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [navigationActive, setNavigationActive] = useState(false);
 
@@ -416,34 +492,60 @@ function App() {
     ];
   }, [start, stops, end]);
 
+  const hasValidRouteEndpoints = isPointSet(start) && isPointSet(end);
+
+  const routePoints = useMemo(() => {
+    if (!navigationActive || !isPointSet(userLocation) || !hasValidRouteEndpoints) {
+      return orderedPoints;
+    }
+
+    const shouldAddCurrentLocation =
+      distanceBetweenPoints(userLocation, start) > SAME_POINT_THRESHOLD_METERS;
+
+    if (!shouldAddCurrentLocation) {
+      return orderedPoints;
+    }
+
+    return [
+      {
+        ...userLocation,
+        type: "user",
+        title: "Current location",
+      },
+      ...orderedPoints,
+    ];
+  }, [navigationActive, userLocation, hasValidRouteEndpoints, orderedPoints, start]);
+
+  const userBearing = useMemo(() => {
+    if (!isPointSet(userLocation)) return 0;
+    const nextPoint = routePoints.find((point) => point.type !== "user" && isPointSet(point));
+    return bearingBetweenPoints(userLocation, nextPoint);
+  }, [routePoints, userLocation]);
+
   useEffect(() => {
-    if (!isPointSet(start) || !isPointSet(end)) {
+    if (!hasValidRouteEndpoints) {
       setRoute(null);
+      setNextInstruction(null);
       setRouteStatus("Add a start and end point.");
       return;
     }
 
     const controller = new AbortController();
-    const coordinates = orderedPoints
+    const coordinates = routePoints
       .filter((point) => isPointSet(point))
       .map((point) => `${point.lon},${point.lat}`)
       .join(";");
-    const selectedMode = TRAVEL_MODES[routeMode];
 
-    setRouteStatus(`Calculating ${selectedMode.label.toLowerCase()} route...`);
+    setRouteStatus(navigationActive ? "Calculating route from your location..." : "Calculating car route...");
 
-    const fetchRoute = (profile, useAvoidHighways = avoidHighways) => {
+    const fetchRoute = () => {
       const params = new URLSearchParams({
         overview: "full",
         geometries: "geojson",
-        steps: "false",
+        steps: "true",
       });
 
-      if (useAvoidHighways) {
-        params.set("exclude", "motorway");
-      }
-
-      return fetch(`https://router.project-osrm.org/route/v1/${profile}/${coordinates}?${params.toString()}`, {
+      return fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?${params.toString()}`, {
         signal: controller.signal,
       }).then((response) => {
         if (!response.ok) throw new Error("Route service failed");
@@ -451,58 +553,31 @@ function App() {
       });
     };
 
-    const routeRequest =
-      routeMode === "car"
-        ? fetchRoute(selectedMode.profile).catch((error) => {
-            if (error.name === "AbortError" || !avoidHighways) throw error;
-            return fetchRoute(selectedMode.profile, false).then((data) => ({ ...data, highwayFallback: true }));
-          })
-        : fetchRoute(selectedMode.profile)
-            .catch((error) => {
-              if (error.name === "AbortError") throw error;
-              return fetchRoute(TRAVEL_MODES.car.profile).then((data) => ({ ...data, fallbackEstimate: true }));
-            })
-            .catch((error) => {
-              if (error.name === "AbortError" || !avoidHighways) throw error;
-              return fetchRoute(TRAVEL_MODES.car.profile, false).then((data) => ({
-                ...data,
-                fallbackEstimate: true,
-                highwayFallback: true,
-              }));
-            });
-
-    routeRequest
+    fetchRoute()
       .then((response) => {
         const data = response;
         const bestRoute = data.routes?.[0];
         if (!bestRoute) throw new Error("No route found");
-        const duration = data.fallbackEstimate
-          ? bestRoute.distance / selectedMode.speedMetersPerSecond
-          : bestRoute.duration;
 
         setRoute({
           distance: bestRoute.distance,
-          duration,
+          duration: bestRoute.duration,
           coordinates: bestRoute.geometry.coordinates,
-          estimatedMode: data.fallbackEstimate,
-          highwayFallback: data.highwayFallback,
         });
+        setNextInstruction(navigationActive ? getNextInstruction(bestRoute.legs) : null);
         setRouteStatus(
-          data.highwayFallback
-            ? "Route ready. This public router could not avoid highways for this route."
-            : data.fallbackEstimate
-            ? `${selectedMode.label} route ready. Time is estimated from road distance.`
-            : `${selectedMode.label} route ready${avoidHighways ? " without highways" : ""}.`,
+          navigationActive ? "Navigation route ready." : "Car route ready.",
         );
       })
       .catch((error) => {
         if (error.name === "AbortError") return;
         setRoute(null);
+        setNextInstruction(null);
         setRouteStatus("Could not calculate that route. Try nearby road locations.");
       });
 
     return () => controller.abort();
-  }, [start, end, orderedPoints, routeMode, avoidHighways]);
+  }, [hasValidRouteEndpoints, routePoints, navigationActive]);
 
   const updateStop = (index, value) => {
     setStops((current) => current.map((stop, stopIndex) => (stopIndex === index ? value : stop)));
@@ -523,6 +598,7 @@ function App() {
     if (pickTarget.kind === "stop") updateStop(pickTarget.index, pickedPoint);
     setActivePick(null);
     setNavigationActive(false);
+    setNextInstruction(null);
   };
 
   const addStop = () => {
@@ -534,8 +610,15 @@ function App() {
     setEnd(emptyPoint("end point"));
     setStops([]);
     setRoute(null);
+    setNextInstruction(null);
     setActivePick(null);
     setNavigationActive(false);
+  };
+
+  const finishNavigation = () => {
+    setNavigationActive(false);
+    setNextInstruction(null);
+    setRouteStatus("Route finished.");
   };
 
   const reverseRoute = () => {
@@ -543,6 +626,7 @@ function App() {
     setEnd({ ...start, label: "end point" });
     setStops((current) => [...current].reverse());
     setNavigationActive(false);
+    setNextInstruction(null);
   };
 
   const requestCurrentLocation = (onSuccess) => {
@@ -576,21 +660,23 @@ function App() {
     requestCurrentLocation((location) => {
       setStart(location);
       setNavigationActive(false);
+      setNextInstruction(null);
     });
   };
 
   const startNavigation = () => {
     const begin = (location) => {
-      if (!isPointSet(start)) {
-        setStart(location);
-      }
       setUserLocation(location);
       setActivePick(null);
       setNavigationActive(true);
-      setRouteStatus(isPointSet(end) ? "Navigation started." : "Add an end point to show the route.");
+      setRouteStatus("Navigation started from your current location.");
     };
 
-    if (userLocation) {
+    if (!hasValidRouteEndpoints) {
+      return;
+    }
+
+    if (isPointSet(userLocation)) {
       begin(userLocation);
       return;
     }
@@ -605,9 +691,9 @@ function App() {
         route={route}
         activePick={activePick}
         onMapPick={handleMapPick}
-        routeMode={routeMode}
         userLocation={userLocation}
         navigationActive={navigationActive}
+        userBearing={userBearing}
       />
       <aside className="planner-panel">
         <header className="brand">
@@ -635,91 +721,89 @@ function App() {
 
         <div className="status-line">{routeStatus}</div>
 
-        <div className="mode-control" aria-label="Travel mode">
-          {Object.entries(TRAVEL_MODES).map(([mode, config]) => {
-            const ModeIcon = config.icon;
-            return (
-              <button
-                key={mode}
-                type="button"
-                className={routeMode === mode ? "mode-button active" : "mode-button"}
-                onClick={() => setRouteMode(mode)}
-              >
-                <ModeIcon size={17} />
-                {config.label}
+        {!navigationActive && (
+          <>
+            <div className="locations">
+              <LocationInput
+                id="start"
+                title="Starting Point"
+                icon={<CircleDot size={17} />}
+                point={start}
+                onChange={setStart}
+                onPick={setStart}
+                onFocusMapPick={() => setActivePick({ kind: "start", label: "starting point" })}
+              />
+
+              {stops.map((stop, index) => (
+                <LocationInput
+                  key={index}
+                  id={`stop-${index}`}
+                  title={`Stop ${index + 1}`}
+                  icon={<MapPin size={17} />}
+                  point={stop}
+                  onChange={(value) => updateStop(index, value)}
+                  onPick={(value) => updateStop(index, value)}
+                  onFocusMapPick={() => setActivePick({ kind: "stop", index, label: `stop ${index + 1}` })}
+                  onRemove={() => setStops((current) => current.filter((_, stopIndex) => stopIndex !== index))}
+                  canRemove
+                />
+              ))}
+
+              <LocationInput
+                id="end"
+                title="End Point"
+                icon={<Flag size={17} />}
+                point={end}
+                onChange={setEnd}
+                onPick={setEnd}
+                onFocusMapPick={() => setActivePick({ kind: "end", label: "end point" })}
+              />
+            </div>
+
+            <div className="actions">
+              <button className="primary-action" type="button" onClick={addStop}>
+                <Plus size={18} />
+                Add Stop
               </button>
-            );
-          })}
-        </div>
+              <button className="secondary-action icon-label" type="button" onClick={reverseRoute}>
+                <ArrowLeftRight size={17} />
+                Reverse
+              </button>
+              <button className="secondary-action icon-label" type="button" onClick={useCurrentLocationAsStart}>
+                <Crosshair size={17} />
+                Current
+              </button>
+              {hasValidRouteEndpoints && (
+                <button className="start-action" type="button" onClick={startNavigation}>
+                  <Play size={18} />
+                  Start Route
+                </button>
+              )}
+              <button className="secondary-action" type="button" onClick={clearRoute}>
+                Clear
+              </button>
+            </div>
+          </>
+        )}
 
-        <label className="avoid-toggle">
-          <input
-            type="checkbox"
-            checked={avoidHighways}
-            onChange={(event) => setAvoidHighways(event.target.checked)}
-          />
-          <CircleSlash size={17} />
-          Avoid highways
-        </label>
-
-        <div className="locations">
-          <LocationInput
-            id="start"
-            title="Starting Point"
-            icon={<CircleDot size={17} />}
-            point={start}
-            onChange={setStart}
-            onPick={setStart}
-            onFocusMapPick={() => setActivePick({ kind: "start", label: "starting point" })}
-          />
-
-          {stops.map((stop, index) => (
-            <LocationInput
-              key={index}
-              id={`stop-${index}`}
-              title={`Stop ${index + 1}`}
-              icon={<MapPin size={17} />}
-              point={stop}
-              onChange={(value) => updateStop(index, value)}
-              onPick={(value) => updateStop(index, value)}
-              onFocusMapPick={() => setActivePick({ kind: "stop", index, label: `stop ${index + 1}` })}
-              onRemove={() => setStops((current) => current.filter((_, stopIndex) => stopIndex !== index))}
-              canRemove
-            />
-          ))}
-
-          <LocationInput
-            id="end"
-            title="End Point"
-            icon={<Flag size={17} />}
-            point={end}
-            onChange={setEnd}
-            onPick={setEnd}
-            onFocusMapPick={() => setActivePick({ kind: "end", label: "end point" })}
-          />
-        </div>
-
-        <div className="actions">
-          <button className="primary-action" type="button" onClick={addStop}>
-            <Plus size={18} />
-            Add Stop
-          </button>
-          <button className="secondary-action icon-label" type="button" onClick={reverseRoute}>
-            <ArrowLeftRight size={17} />
-            Reverse
-          </button>
-          <button className="secondary-action icon-label" type="button" onClick={useCurrentLocationAsStart}>
-            <Crosshair size={17} />
-            Current
-          </button>
-          <button className="start-action" type="button" onClick={startNavigation}>
-            <Play size={18} />
-            Start Route
-          </button>
-          <button className="secondary-action" type="button" onClick={clearRoute}>
-            Clear
-          </button>
-        </div>
+        {navigationActive && (
+          <div className="navigation-actions">
+            <div className="next-turn">
+              <div className="next-turn-icon">
+                <Navigation size={22} />
+              </div>
+              <div>
+                <span>Next maneuver</span>
+                <strong>{nextInstruction?.instruction || "Follow the highlighted route"}</strong>
+                {nextInstruction?.distanceText && <em>{nextInstruction.distanceText}</em>}
+              </div>
+            </div>
+            <button className="finish-action" type="button" onClick={finishNavigation}>
+              <Flag size={18} />
+              End Route
+            </button>
+          </div>
+        )}
 
         <footer className="panel-footer">
           Uses OpenStreetMap search and public OSRM routing. Internet is required for live maps and routes.
