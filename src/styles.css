@@ -137,6 +137,71 @@ label {
   margin-bottom: 16px;
 }
 
+.option-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.avoid-toggle {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  color: #28423b;
+  background: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.avoid-toggle input {
+  width: 17px;
+  height: 17px;
+  accent-color: #0b4f6c;
+}
+
+.avoid-toggle svg {
+  color: #d64545;
+}
+
+.map-layer-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid #d7dfd8;
+  border-radius: 8px;
+  background: #edf3ee;
+}
+
+.layer-button {
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  border-radius: 7px;
+  color: #53625b;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+
+.layer-button:hover {
+  color: #172026;
+  background: #fff;
+}
+
+.layer-button.active {
+  color: #fff;
+  background: #0b4f6c;
+  box-shadow: 0 6px 18px rgba(11, 79, 108, 0.2);
+}
+
 .locations {
   display: grid;
   gap: 12px;
@@ -180,6 +245,10 @@ label {
   padding: 0 8px 0 12px;
 }
 
+.search-field.with-current-action {
+  grid-template-columns: 22px minmax(0, 1fr) 34px 34px;
+}
+
 .search-field:focus-within {
   border-color: #0f8b8d;
   box-shadow: 0 0 0 3px rgba(15, 139, 141, 0.14);
@@ -215,6 +284,15 @@ label {
 
 .icon-button:hover {
   background: #dce8e4;
+}
+
+.current-point-button {
+  color: #0b4f6c;
+  background: #e7f2f2;
+}
+
+.current-point-button:hover {
+  background: #d4e9e8;
 }
 
 .suggestions {

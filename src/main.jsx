@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import {
   ArrowLeftRight,
   CircleDot,
+  CircleSlash,
   Clock3,
   Crosshair,
   Flag,
@@ -24,9 +25,37 @@ const BULGARIA_BOUNDS = [
   [41.14, 22.35],
   [44.23, 28.75],
 ];
+const MAP_PAN_BOUNDS = [
+  [40.55, 21.35],
+  [44.85, 29.75],
+];
 
 const ROUTE_COLOR = "#0b4f6c";
 const SAME_POINT_THRESHOLD_METERS = 35;
+
+const MAP_LAYERS = {
+  default: {
+    label: "Default",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+  satellite: {
+    label: "Satellite",
+    url: "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution:
+      "Tiles &copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    overlays: [
+      {
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+        attribution: "Roads &copy; Esri",
+      },
+      {
+        url: "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        attribution: "Labels &copy; Esri",
+      },
+    ],
+  },
+};
 
 const emptyPoint = (label) => ({
   label,
@@ -256,6 +285,7 @@ function LocationInput({
   onChange,
   onPick,
   onFocusMapPick,
+  onUseCurrentLocation,
   onRemove,
   canRemove,
 }) {
@@ -326,7 +356,7 @@ function LocationInput({
           </button>
         )}
       </div>
-      <div className="search-field">
+      <div className={onUseCurrentLocation ? "search-field with-current-action" : "search-field"}>
         <Search size={16} />
         <input
           id={id}
@@ -341,6 +371,16 @@ function LocationInput({
         <button className="icon-button" type="button" onClick={onFocusMapPick} title="Pick on map">
           <LocateFixed size={16} />
         </button>
+        {onUseCurrentLocation && (
+          <button
+            className="icon-button current-point-button"
+            type="button"
+            onClick={onUseCurrentLocation}
+            title={`Use current location as ${title.toLowerCase()}`}
+          >
+            <Crosshair size={16} />
+          </button>
+        )}
       </div>
       {open && (results.length > 0 || loading) && (
         <div className="suggestions">
@@ -361,9 +401,11 @@ function LocationInput({
   );
 }
 
-function MapView({ points, route, activePick, onMapPick, userLocation, navigationActive, userBearing }) {
+function MapView({ points, route, activePick, onMapPick, userLocation, navigationActive, userBearing, mapLayer }) {
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const overlayLayerRefs = useRef([]);
   const activePickRef = useRef(activePick);
   const onMapPickRef = useRef(onMapPick);
 
@@ -380,15 +422,23 @@ function MapView({ points, route, activePick, onMapPick, userLocation, navigatio
 
     const map = L.map("map", {
       zoomControl: false,
-      maxBounds: BULGARIA_BOUNDS,
-      maxBoundsViscosity: 0.7,
+      maxBounds: MAP_PAN_BOUNDS,
+      maxBoundsViscosity: 0.35,
     }).setView(BULGARIA_CENTER, 7);
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const initialLayer = MAP_LAYERS[mapLayer] || MAP_LAYERS.default;
+    tileLayerRef.current = L.tileLayer(initialLayer.url, {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: initialLayer.attribution,
     }).addTo(map);
+    tileLayerRef.current.bringToBack();
+    overlayLayerRefs.current = (initialLayer.overlays || []).map((overlay) =>
+      L.tileLayer(overlay.url, {
+        maxZoom: 19,
+        attribution: overlay.attribution,
+      }).addTo(map),
+    );
 
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -398,6 +448,28 @@ function MapView({ points, route, activePick, onMapPick, userLocation, navigatio
       onMapPickRef.current(event.latlng, activePickRef.current);
     });
   }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !tileLayerRef.current) return;
+
+    const selectedLayer = MAP_LAYERS[mapLayer] || MAP_LAYERS.default;
+    mapRef.current.removeLayer(tileLayerRef.current);
+    overlayLayerRefs.current.forEach((overlay) => mapRef.current.removeLayer(overlay));
+    overlayLayerRefs.current = [];
+
+    tileLayerRef.current = L.tileLayer(selectedLayer.url, {
+      maxZoom: 19,
+      attribution: selectedLayer.attribution,
+    }).addTo(mapRef.current);
+    tileLayerRef.current.bringToBack();
+    overlayLayerRefs.current = (selectedLayer.overlays || []).map((overlay) =>
+      L.tileLayer(overlay.url, {
+        maxZoom: 19,
+        attribution: overlay.attribution,
+      }).addTo(mapRef.current),
+    );
+    mapRef.current.invalidateSize();
+  }, [mapLayer]);
 
   useEffect(() => {
     if (!mapRef.current || !layerRef.current) return;
@@ -477,6 +549,8 @@ function App() {
   const [nextInstruction, setNextInstruction] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [navigationActive, setNavigationActive] = useState(false);
+  const [avoidHighways, setAvoidHighways] = useState(false);
+  const [mapLayer, setMapLayer] = useState("default");
 
   const orderedPoints = useMemo(() => {
     const mappedStops = stops.map((stop, index) => ({
@@ -538,12 +612,16 @@ function App() {
 
     setRouteStatus(navigationActive ? "Calculating route from your location..." : "Calculating car route...");
 
-    const fetchRoute = () => {
+    const fetchRoute = (useAvoidHighways = avoidHighways) => {
       const params = new URLSearchParams({
         overview: "full",
         geometries: "geojson",
         steps: "true",
       });
+
+      if (useAvoidHighways) {
+        params.set("exclude", "motorway");
+      }
 
       return fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?${params.toString()}`, {
         signal: controller.signal,
@@ -554,6 +632,10 @@ function App() {
     };
 
     fetchRoute()
+      .catch((error) => {
+        if (error.name === "AbortError" || !avoidHighways) throw error;
+        return fetchRoute(false).then((data) => ({ ...data, highwayFallback: true }));
+      })
       .then((response) => {
         const data = response;
         const bestRoute = data.routes?.[0];
@@ -563,10 +645,15 @@ function App() {
           distance: bestRoute.distance,
           duration: bestRoute.duration,
           coordinates: bestRoute.geometry.coordinates,
+          highwayFallback: data.highwayFallback,
         });
         setNextInstruction(navigationActive ? getNextInstruction(bestRoute.legs) : null);
         setRouteStatus(
-          navigationActive ? "Navigation route ready." : "Car route ready.",
+          data.highwayFallback
+            ? "Route ready. This public router could not avoid highways for this route."
+            : navigationActive
+            ? `Navigation route ready${avoidHighways ? " without highways" : ""}.`
+            : `Car route ready${avoidHighways ? " without highways" : ""}.`,
         );
       })
       .catch((error) => {
@@ -577,7 +664,7 @@ function App() {
       });
 
     return () => controller.abort();
-  }, [hasValidRouteEndpoints, routePoints, navigationActive]);
+  }, [hasValidRouteEndpoints, routePoints, navigationActive, avoidHighways]);
 
   const updateStop = (index, value) => {
     setStops((current) => current.map((stop, stopIndex) => (stopIndex === index ? value : stop)));
@@ -629,13 +716,15 @@ function App() {
     setNextInstruction(null);
   };
 
-  const requestCurrentLocation = (onSuccess) => {
+  const requestCurrentLocation = (onSuccess, options = {}) => {
+    const { silent = false } = options;
+
     if (!navigator.geolocation) {
-      setRouteStatus("Current location is not available in this browser.");
+      if (!silent) setRouteStatus("Current location is not available in this browser.");
       return;
     }
 
-    setRouteStatus("Finding your current location...");
+    if (!silent) setRouteStatus("Finding your current location...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const location = {
@@ -646,19 +735,40 @@ function App() {
           lon: position.coords.longitude,
         };
         setUserLocation(location);
-        setRouteStatus("Current location found.");
+        if (!silent) setRouteStatus("Current location found.");
         onSuccess?.(location);
       },
       () => {
-        setRouteStatus("Could not access current location. Check browser location permission.");
+        if (!silent) {
+          setRouteStatus("Could not access current location. Check browser location permission.");
+        }
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 15000 },
     );
   };
 
+  useEffect(() => {
+    requestCurrentLocation(undefined, { silent: true });
+  }, []);
+
   const useCurrentLocationAsStart = () => {
     requestCurrentLocation((location) => {
-      setStart(location);
+      setUserLocation(location);
+      setNavigationActive(false);
+      setNextInstruction(null);
+    });
+  };
+
+  const useCurrentLocationForPoint = (kind) => {
+    requestCurrentLocation((location) => {
+      const point = {
+        ...location,
+        label: kind === "start" ? "starting point" : "end point",
+      };
+
+      if (kind === "start") setStart(point);
+      if (kind === "end") setEnd(point);
+      setActivePick(null);
       setNavigationActive(false);
       setNextInstruction(null);
     });
@@ -694,6 +804,7 @@ function App() {
         userLocation={userLocation}
         navigationActive={navigationActive}
         userBearing={userBearing}
+        mapLayer={mapLayer}
       />
       <aside className="planner-panel">
         <header className="brand">
@@ -723,6 +834,31 @@ function App() {
 
         {!navigationActive && (
           <>
+            <div className="option-panel">
+              <label className="avoid-toggle">
+                <input
+                  type="checkbox"
+                  checked={avoidHighways}
+                  onChange={(event) => setAvoidHighways(event.target.checked)}
+                />
+                <CircleSlash size={17} />
+                Avoid highways
+              </label>
+
+              <div className="map-layer-control" aria-label="Map view">
+                {Object.entries(MAP_LAYERS).map(([layerKey, layer]) => (
+                  <button
+                    key={layerKey}
+                    type="button"
+                    className={mapLayer === layerKey ? "layer-button active" : "layer-button"}
+                    onClick={() => setMapLayer(layerKey)}
+                  >
+                    {layer.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="locations">
               <LocationInput
                 id="start"
@@ -732,6 +868,7 @@ function App() {
                 onChange={setStart}
                 onPick={setStart}
                 onFocusMapPick={() => setActivePick({ kind: "start", label: "starting point" })}
+                onUseCurrentLocation={() => useCurrentLocationForPoint("start")}
               />
 
               {stops.map((stop, index) => (
@@ -757,6 +894,7 @@ function App() {
                 onChange={setEnd}
                 onPick={setEnd}
                 onFocusMapPick={() => setActivePick({ kind: "end", label: "end point" })}
+                onUseCurrentLocation={() => useCurrentLocationForPoint("end")}
               />
             </div>
 
